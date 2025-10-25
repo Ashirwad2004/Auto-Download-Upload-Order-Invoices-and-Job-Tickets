@@ -1,0 +1,423 @@
+{
+  "name": "Auto Download & Upload Order Invoices and Job Tickets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "id": "cc6aa6d1-2241-42b8-8566-53ae7f3e2d9a",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -5040,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "adminUrl",
+              "value": "https://www.ezsignstore.com/admin",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "username",
+              "value": "Auto",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "password",
+              "value": "Print@1234",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "driveFolderId",
+              "value": "1d63oIalIMsHyjApV_hdY5175FbAkxcce",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "yourName",
+              "value": "Sriram",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "2f25fe0d-6db8-454f-b142-2f670d6e8b41",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4784,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.adminUrl }}",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "username",
+              "value": "={{ $json.username }}"
+            },
+            {
+              "name": "password",
+              "value": "={{ $json.password }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "a3e5108e-df3f-432a-afc1-b21828327da5",
+      "name": "Login to Admin Panel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4560,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.ezsignstore.com/admin/order_listing.php",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{$node[\"Login to Admin Panel\"].json[\"headers\"][\"set-cookie\"].join('; ')}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4336,
+        1648
+      ],
+      "id": "ba164036-65be-40e8-a5e5-e55e3a1b59a2",
+      "name": "Go to Orders Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data;\nconst orders = [];\n\n// Extract all table rows\nconst rowRegex = /<tr[^>]*>(.*?)<\\/tr>/gis;\nconst rows = html.match(rowRegex) || [];\n\nconsole.log(`Found ${rows.length} total rows in HTML`);\n\nfor (const row of rows) {\n  // Look for order ID\n  const orderIdMatch = row.match(/Order[\\s#:]*([0-9]+)/i);\n  if (!orderIdMatch) continue;\n  \n  const orderId = orderIdMatch[1];\n  console.log(`Processing Order #${orderId}`);\n  \n  let invoiceUrl = '';\n  let jobTicketUrl = '';\n  \n  // Extract all links in the row\n  const linkRegex = /<a[^>]*href=[\\\"']([^\\\"']*)[\\\"'][^>]*>(.*?)<\\/a>/gi;\n  let linkMatch;\n  \n  while ((linkMatch = linkRegex.exec(row)) !== null) {\n    const href = linkMatch[1].trim();\n    const text = linkMatch[2].replace(/<[^>]*>/g, '').toLowerCase().trim();\n    \n    console.log(`  Found link: \"${text}\" -> ${href}`);\n    \n    // Check for invoice link\n    if ((text.includes('invoice') || text.includes('inv')) && href && href !== '#' && href !== '') {\n      invoiceUrl = href.startsWith('http') ? href : 'https://www.ezsignstore.com' + (href.startsWith('/') ? href : '/' + href);\n      console.log(`  \u2713 Invoice URL: ${invoiceUrl}`);\n    }\n    \n    // Check for job ticket link\n    if ((text.includes('job') || text.includes('ticket') || text.includes('jt')) && href && href !== '#' && href !== '') {\n      jobTicketUrl = href.startsWith('http') ? href : 'https://www.ezsignstore.com' + (href.startsWith('/') ? href : '/' + href);\n      console.log(`  \u2713 Job Ticket URL: ${jobTicketUrl}`);\n    }\n  }\n  \n  // Add order to results (even if URLs are empty)\n  orders.push({\n    orderId,\n    invoiceUrl: invoiceUrl || '',\n    jobTicketUrl: jobTicketUrl || ''\n  });\n}\n\nconsole.log(`\\nTotal orders extracted: ${orders.length}`);\n\n// Return all orders found, or a single empty item if none found\nreturn orders.length > 0 ? orders : [{ orderId: 'none', invoiceUrl: '', jobTicketUrl: '' }];"
+      },
+      "id": "c3e1e044-be5d-474e-8202-11f02e4c1b3e",
+      "name": "Extract Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4112,
+        1648
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $('Workflow Configuration').first().json.yourName + ' - Order #' + ($itemIndex + 1) }}\n",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1d63oIalIMsHyjApV_hdY5175FbAkxcce",
+          "mode": ""
+        },
+        "options": {}
+      },
+      "id": "56ebd7f5-cfde-4deb-97f6-82935d7c7739",
+      "name": "Create Order Folder",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -3888,
+        1648
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "oGE9kYKbr1tOU8wQ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.invoiceUrl || 'https://www.ezsignstore.com/admin/order_print.php?oid=47' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{$node[\"Login to Admin Panel\"].json[\"headers\"][\"set-cookie\"].join('; ')}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "0032cf7d-1c0f-4b06-a676-c6aedeb8c162",
+      "name": "Download Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3440,
+        1536
+      ],
+      "options": {
+        "response": {
+          "response": {
+            "responseFormat": "file",
+            "binaryPropertyName": "invoiceFile"
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.jobTicketUrl || 'https://www.ezsignstore.com/admin/order_print_job_ticket.php?jobticket=true&OrderId=47' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "={{$node[\"Login to Admin Panel\"].json[\"headers\"][\"set-cookie\"].join('; ')}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "e6111f26-5a01-48ba-9f65-df07f59a32ff",
+      "name": "Download Job Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3456,
+        1776
+      ],
+      "options": {
+        "response": {
+          "response": {
+            "responseFormat": "file",
+            "binaryPropertyName": "jobFile"
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "=Invoice{{ $json.orderId }}.pdf",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Order Folder').item.json.id }}"
+        },
+        "options": {
+          "binaryData": true,
+          "binaryPropertyName": "invoiceFile"
+        }
+      },
+      "id": "5a3f4830-905f-4528-9ac3-41d489fa947b",
+      "name": "Upload Invoice",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -3216,
+        1536
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "oGE9kYKbr1tOU8wQ",
+          "name": "Google Drive account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "=JobTicket{{ $json.orderId }}.pdf",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Create Order Folder').item.json.id }}"
+        },
+        "options": {
+          "binaryData": true,
+          "binaryPropertyName": "jobFile"
+        }
+      },
+      "id": "6accaf3b-ab76-4b47-a89f-53db1c0e090b",
+      "name": "Upload Job Ticket",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -3216,
+        1776
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "oGE9kYKbr1tOU8wQ",
+          "name": "Google Drive account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Login to Admin Panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login to Admin Panel": {
+      "main": [
+        [
+          {
+            "node": "Go to Orders Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Go to Orders Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Order Data": {
+      "main": [
+        [
+          {
+            "node": "Create Order Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Order Folder": {
+      "main": [
+        [
+          {
+            "node": "Download Invoice",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Download Job Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Invoice": {
+      "main": [
+        [
+          {
+            "node": "Upload Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Job Ticket": {
+      "main": [
+        [
+          {
+            "node": "Upload Job Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f57e1142-95aa-4e28-a412-a8e7a549382a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ce6a77994bd82b534b8eb40653763e72ccee5286f52d970b89bbf6e229061bea"
+  },
+  "id": "WabWR2kyGxHlsQiX",
+  "tags": []
+}
